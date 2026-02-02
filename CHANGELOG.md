@@ -9,7 +9,7 @@ to a section with the version name.
 ## Unreleased Changes
 
 * Fix dashboard to work on v16
-* Fix error lookup up item-level tax templates
+* Fix error looking up item-level tax templates
     * Looks like a regression from 0.50.2
 * Fix print formats on v16
   * Before version 0.37.1 of ksa_compliance, the print formats relied on item-wise tax details to retrieve tax values 
