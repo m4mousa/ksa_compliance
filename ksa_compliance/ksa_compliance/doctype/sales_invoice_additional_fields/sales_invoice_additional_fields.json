@@ -28,7 +28,6 @@
   "column_break_jdre",
   "qr_code",
   "qr_code_image",
-  "column_break_qbcl",
   "qr_image_src",
   "buyer_address_tab",
   "buyer_id_section",
@@ -568,7 +567,6 @@
    "read_only": 1
   },
   {
-   "columns": 4,
    "fieldname": "qr_code_image",
    "fieldtype": "Image",
    "is_virtual": 1,
@@ -655,11 +653,11 @@
    "link_fieldname": "invoice_additional_fields_reference"
   }
  ],
- "modified": "2025-10-01 19:10:34.373255",
+ "modified": "2026-02-03 15:16:56.510792",
  "modified_by": "Administrator",
  "module": "KSA Compliance",
  "name": "Sales Invoice Additional Fields",
- "naming_rule": "Expression",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {

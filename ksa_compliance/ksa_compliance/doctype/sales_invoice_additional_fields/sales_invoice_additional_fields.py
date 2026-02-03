@@ -134,6 +134,7 @@ class SalesInvoiceAdditionalFields(Document):
         vat_exemption_reason_code: DF.Data | None
         vat_exemption_reason_text: DF.SmallText | None
     # end: auto-generated types
+
     send_mode: ZatcaSendMode = ZatcaSendMode.Production
 
     @staticmethod
@@ -553,7 +554,7 @@ class SalesInvoiceAdditionalFields(Document):
             return None
         qr = pyqrcode.create(self.qr_code)
         with BytesIO() as buffer:
-            qr.png(buffer, scale=7)
+            qr.png(buffer, scale=4)
             buffer.seek(0)
             return 'data:image/png;base64,' + base64.b64encode(buffer.getvalue()).decode('utf-8')
 

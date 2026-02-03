@@ -18,6 +18,9 @@ to a section with the version name.
   * v16 has a breaking change in how item wise tax details are stored 
     ([reference](https://github.com/frappe/erpnext/wiki/Item-Wise-Tax-Details:-JSON-%E2%86%92-Child-Table)), so we 
     now retrieve item wise tax details differently depending on ERPNext version
+* Reduce size of QR code image in sales invoice additional fields
+  * We generate the image using pyqrcode, which doesn't accept a total image size. It accepts the size for a single QR
+    data module. It used to be 7, which resulted in an 847x847 image. Now it's 4, which results in 484x484
 
 ## 0.57.4
 
