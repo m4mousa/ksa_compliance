@@ -8,15 +8,17 @@ to a section with the version name.
 
 ## Unreleased Changes
 
+## 0.58.0
+
 * Fix dashboard to work on v16
 * Fix error looking up item-level tax templates
-    * Looks like a regression from 0.50.2
+  * Looks like a regression from 0.50.2
 * Fix print formats on v16
-  * Before version 0.37.1 of ksa_compliance, the print formats relied on item-wise tax details to retrieve tax values 
+  * Before version 0.37.1 of ksa\_compliance, the print formats relied on item-wise tax details to retrieve tax values
     per line. While they no longer do so, the behavior is kept for when printing invoices generated on 
-    ksa_compliance versions older than 0.37.1
+    ksa\_compliance versions older than 0.37.1
   * v16 has a breaking change in how item wise tax details are stored 
-    ([reference](https://github.com/frappe/erpnext/wiki/Item-Wise-Tax-Details:-JSON-%E2%86%92-Child-Table)), so we 
+    ([reference](https://github.com/frappe/erpnext/wiki/Item-Wise-Tax-Details:-JSON-%E2%86%92-Child-Table)), so we
     now retrieve item wise tax details differently depending on ERPNext version
 * Reduce size of QR code image in sales invoice additional fields
   * We generate the image using pyqrcode, which doesn't accept a total image size. It accepts the size for a single QR
