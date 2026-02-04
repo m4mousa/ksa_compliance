@@ -1,29 +1,67 @@
 import base64
 import datetime
+import json
 from base64 import b64encode
 from io import BytesIO
-from typing import cast, Optional
-
-import pyqrcode
+from typing import cast, TypedDict, Iterable, Callable, TypeVar, Optional
 
 import frappe
+import pyqrcode
 from erpnext.accounts.doctype.pos_invoice.pos_invoice import POSInvoice
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
 from erpnext.setup.doctype.branch.branch import Branch
+from frappe import _dict as fdict
 from frappe.utils.data import get_time, getdate
+from semantic_version import Version
+
 from ksa_compliance.ksa_compliance.doctype.zatca_business_settings.zatca_business_settings import ZATCABusinessSettings
+from ksa_compliance.ksa_compliance.doctype.zatca_phase_1_business_settings.zatca_phase_1_business_settings import (
+    ZATCAPhase1BusinessSettings,
+)
 
 
-def get_zatca_phase_1_qr_for_invoice(invoice_name: str) -> str:
-    values = get_qr_inputs(invoice_name)
+class ItemWiseTaxDetailRow(TypedDict):
+    rate: float
+    amount: float
+
+
+def get_item_wise_tax_details(invoice: SalesInvoice | POSInvoice) -> dict[str, ItemWiseTaxDetailRow]:
+    from erpnext import __version__ as erpnext_version
+
+    if Version(erpnext_version) >= Version('16.0.0'):
+        records = frappe.get_all(
+            'Item Wise Tax Detail',
+            filters={'parenttype': invoice.doctype, 'parent': invoice.name},
+            fields=['item_row', 'rate', 'amount'],
+        )
+        return {r['item_row']: {'rate': r['rate'], 'amount': r['amount']} for r in records}
+
+    # Legacy item wise tax details are item_code -> a list of [rate, amount]
+    # We want to convert this into information by item row to match the v16 API. Note that this produces incorrect
+    # results when an item code is repeated on multiple lines, which is why we only use this as fallback for
+    # invoices generated on versions prior to ksa_compliance 0.37.1
+    details: dict[str, list[float]] = json.loads(
+        frappe.db.get_value(
+            'Sales Taxes and Charges', {'parenttype': invoice.doctype, 'parent': invoice.name}, 'item_wise_tax_detail'
+        )
+    )
+    result: dict[str, ItemWiseTaxDetailRow] = {item.name: {'rate': 0.0, 'amount': 0.0} for item in invoice.items}
+    for item_code, values in details.items():
+        row = _find_first_or_default(invoice.items, lambda item: item.item_code == item_code)
+        if row:
+            result[row.name] = {'rate': values[0], 'amount': values[1]}
+    return result
+
+
+def get_zatca_phase_1_qr_for_invoice(invoice_name: str) -> str | None:
+    values = _get_qr_inputs(invoice_name)
     if values is None:
         return values
-    decoded_string = generate_decoded_string(values)
-    return generate_qrcode(decoded_string)
+    decoded_string = _generate_decoded_string(values)
+    return _generate_qrcode(decoded_string)
 
 
-def get_qr_inputs(invoice_name: str) -> list:
-    invoice_doc: Optional[SalesInvoice] = None
+def _get_qr_inputs(invoice_name: str) -> list | None:
     if frappe.db.exists('POS Invoice', invoice_name):
         invoice_doc = cast(POSInvoice, frappe.get_doc('POS Invoice', invoice_name))
     elif frappe.db.exists('Sales Invoice', invoice_name):
@@ -34,27 +72,29 @@ def get_qr_inputs(invoice_name: str) -> list:
     phase_1_name = frappe.get_value('ZATCA Phase 1 Business Settings', {'company': seller_name})
     if not phase_1_name:
         return None
-    phase_1_settings = frappe.get_doc('ZATCA Phase 1 Business Settings', phase_1_name)
+    phase_1_settings = cast(
+        ZATCAPhase1BusinessSettings, frappe.get_doc('ZATCA Phase 1 Business Settings', phase_1_name)
+    )
     if phase_1_settings.status == 'Disabled':
         return None
     seller_vat_reg_no = phase_1_settings.vat_registration_number
     time = invoice_doc.posting_time
-    timestamp = format_date(invoice_doc.posting_date, time)
+    timestamp = _format_date(invoice_doc.posting_date, time)
     grand_total = invoice_doc.grand_total
     total_vat = invoice_doc.total_taxes_and_charges
     # returned values should be ordered based on ZATCA Qr Specifications
     return [seller_name, seller_vat_reg_no, timestamp, grand_total, total_vat]
 
 
-def generate_decoded_string(values: list) -> str:
+def _generate_decoded_string(values: list) -> str:
     encoded_text = ''
     for tag, value in enumerate(values, 1):
-        encoded_text += encode_input(value, [tag])
+        encoded_text += _encode_input(value, [tag])
     # Decode hex result string into base64 format
     return b64encode(bytes.fromhex(encoded_text)).decode()
 
 
-def encode_input(input: str, tag: int) -> str:
+def _encode_input(input: str, tag: list[int]) -> str:
     """
     1- Convert bytes of tag into hex format.
     2- Convert bytes of encoded length of input into hex format.
@@ -71,7 +111,7 @@ def encode_input(input: str, tag: int) -> str:
     return encoded_tag + encoded_length + encoded_value
 
 
-def format_date(date: str, time: str) -> str:
+def _format_date(date: str, time: str) -> str:
     """
     Format date & time into UTC format something like : " 2021-12-13T10:39:15Z"
     """
@@ -83,7 +123,7 @@ def format_date(date: str, time: str) -> str:
     return time_stamp
 
 
-def generate_qrcode(data: str) -> str:
+def _generate_qrcode(data: str) -> str | None:
     if not data:
         return None
     qr = pyqrcode.create(data)
@@ -109,8 +149,8 @@ def get_phase_2_print_format_details(sales_invoice: SalesInvoice | POSInvoice) -
             branch_doc = cast(Branch, frappe.get_doc('Branch', sales_invoice.branch))
             if branch_doc.custom_company_address:
                 has_branch_address = True
-    seller_other_id, seller_other_id_name = get_seller_other_id(sales_invoice, settings)
-    buyer_other_id, buyer_other_id_name = get_buyer_other_id(sales_invoice.customer)
+    seller_other_id, seller_other_id_name = _get_seller_other_id(sales_invoice, settings)
+    buyer_other_id, buyer_other_id_name = _get_buyer_other_id(sales_invoice.customer)
     siaf = frappe.get_last_doc('Sales Invoice Additional Fields', {'sales_invoice': sales_invoice.name})
     return {
         'settings': settings,
@@ -128,7 +168,7 @@ def get_phase_2_print_format_details(sales_invoice: SalesInvoice | POSInvoice) -
     }
 
 
-def get_seller_other_id(sales_invoice: SalesInvoice | POSInvoice, settings: ZATCABusinessSettings) -> tuple:
+def _get_seller_other_id(sales_invoice: SalesInvoice | POSInvoice, settings: ZATCABusinessSettings) -> tuple:
     seller_other_ids = ['CRN', 'MOM', 'MLS', '700', 'SAG', 'OTH']
     seller_other_id, seller_other_id_name = None, None
     if settings.enable_branch_configuration:
@@ -150,7 +190,7 @@ def get_seller_other_id(sales_invoice: SalesInvoice | POSInvoice, settings: ZATC
     return seller_other_id, seller_other_id_name or 'Commercial Registration Number'
 
 
-def get_buyer_other_id(customer: str) -> tuple:
+def _get_buyer_other_id(customer: str) -> tuple:
     buyer_other_ids = ['TIN', 'CRN', 'MOM', 'MLS', '700', 'SAG', 'NAT', 'GCC', 'IQA', 'PAS', 'OTH']
     buyer_other_id, buyer_other_id_name = None, None
     for other_id in buyer_other_ids:
@@ -162,3 +202,15 @@ def get_buyer_other_id(customer: str) -> tuple:
             )
             break
     return buyer_other_id, buyer_other_id_name or 'Commercial Registration Number'
+
+
+T = TypeVar('T')
+
+
+def _find_first_or_default(
+    items: Iterable[T], predicate: Callable[[T], bool], default: Optional[T] = None
+) -> Optional[T]:
+    for i in items:
+        if predicate(i):
+            return i
+    return default

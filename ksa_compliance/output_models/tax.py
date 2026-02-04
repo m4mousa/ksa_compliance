@@ -59,27 +59,23 @@ def create_tax_categories(doc: SalesInvoice | PaymentEntry, item_lines: list, is
             tax_category_id = frappe.db.get_value(
                 'Sales Taxes and Charges Template', sales_taxes_and_charges_template, 'tax_category'
             )
-            tax_category_id = map_tax_category(tax_category_id=tax_category_id)
+            zatca_tax_category = map_tax_category(tax_category_id=tax_category_id)
             tax_category_percent = frappe.db.get_value(
                 'Sales Taxes and Charges', {'parent': sales_taxes_and_charges_template}, 'rate'
             )
-            zatca_category = frappe.db.get_value('Tax Category', tax_category_id, 'custom_zatca_category')
         else:
-            tax_category_id = map_tax_category(item_tax_template_id=row.item_tax_template)
+            zatca_tax_category = map_tax_category(item_tax_template_id=row.item_tax_template)
             tax_category_percent = frappe.db.get_value(
                 'Item Tax Template Detail', {'parent': row.item_tax_template}, 'tax_rate'
             )
-            zatca_category = frappe.db.get_value(
-                'Item Tax Template', row.item_tax_template, 'custom_zatca_item_tax_category'
-            )
         tax_category = TaxCategory(
-            zatca_tax_category_id=tax_category_id, percent=tax_category_percent, tax_scheme_id='VAT'
+            zatca_tax_category_id=zatca_tax_category, percent=tax_category_percent, tax_scheme_id='VAT'
         )
 
         row.tax_category = dataclass_to_frappe_dict(tax_category)
         tax_category_by_items = TaxCategoryByItems(tax_category=tax_category, items=[])
         tax_category_by_items_cls = tax_category_map.setdefault(
-            zatca_category + str(tax_category_percent), tax_category_by_items
+            zatca_tax_category.tax_category_code + str(tax_category_percent), tax_category_by_items
         )
         tax_category_by_items_cls.items.append(row)
     return tax_category_map
@@ -118,7 +114,7 @@ def create_tax_total(tax_categories: dict) -> dict:
     )
 
 
-def _get_amounts(tax_category: TaxCategoryByItems) -> float:
+def _get_amounts(tax_category: TaxCategoryByItems) -> frappe._dict:
     taxable_amount = 0
     tax_amount = 0
     total_discount = 0

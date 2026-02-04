@@ -887,6 +887,14 @@ class Einvoice:
         # --------------------------- END Invoice Basic info ------------------------------
         # --------------------------- Start Getting Invoice's item lines ------------------------------
         item_lines = []
+        if not self.sales_invoice_doc.taxes:
+            fthrow(
+                ft(
+                    'Invoice $name does not have any taxes. Please make sure you have configured a default sales taxes and charges template',
+                    name=self.sales_invoice_doc.name,
+                )
+            )
+
         is_tax_included = self.sales_invoice_doc.taxes[0].get(
             get_right_fieldname('included_in_print_rate', self.sales_invoice_doc.doctype)
         )
